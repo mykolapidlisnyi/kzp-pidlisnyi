@@ -9,8 +9,8 @@ class MainTest {
     @Test
     void testCalculateSummaryAndFormatReportWithValidGymData() {
         List<GymSubscription> records = List.of(
-                new GymSubscription("Іван Франко", "Unlimited", 12, 100, 10000.0),
-                new GymSubscription("Леся Українка", "Standard", 3, 20, 3000.0)
+                new PremiumSubscription("Іван Франко", "Unlimited", 12, 100, 10000.0, 24),
+                new StandardSubscription("Леся Українка", "Standard", 3, 20, 3000.0)
         );
 
         GymSummary summary = Main.calculateSummary(records);
