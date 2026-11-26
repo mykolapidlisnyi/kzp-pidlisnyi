@@ -9,21 +9,23 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.DoubleSummaryStatistics;
+import java.util.IntSummaryStatistics;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 
 /**
- * Головний клас застосунку для лабораторної роботи № 3 (Варіант 20 — Тренажерний зал).
- * Працює з поліморфною ієрархією {@link GymSubscription} ({@link StandardSubscription}, {@link PremiumSubscription}).
+ * Головний клас застосунку для лабораторної роботи № 4 (Варіант 20 — Тренажерний зал).
+ * Використовує декларативні потокові запити {@link GymQueries} (Stream API) для обчислення звіту.
  *
  * @author Підлісний Микола Олександрович
- * @version 3.0.0
+ * @version 4.0.0
  */
 public class Main {
 
-    public static final String VERSION = "3.0.0";
+    public static final String VERSION = "4.0.0";
     public static final String STUDENT_NAME = "Підлісний Микола Олександрович";
     public static final int VARIANT = 20;
 
@@ -130,61 +132,42 @@ public class Main {
     }
 
     /**
-     * Обчислює підсумкові показники через поліморфну колекцію базового типу {@link GymSubscription}.
+     * Обчислює підсумкові показники виключно декларативними запитами Stream API без ручних циклів.
      */
     public static GymSummary calculateSummary(List<GymSubscription> records) {
         if (records == null || records.isEmpty()) {
             return new GymSummary(0, 0.0, 0.0, "немає", "немає", 0, 0.0);
         }
 
-        int totalVisits = 0;
-        double totalRevenue = 0.0;
-        double sumEffectiveCost = 0.0;
-        int maxMonths = -1;
-        String longestSubscriptionInfo = "";
+        IntSummaryStatistics visitsStats = GymQueries.visitsStatistics(records);
+        DoubleSummaryStatistics revenueStats = GymQueries.revenueStatistics(records);
+        DoubleSummaryStatistics effectiveCostStats = GymQueries.effectiveVisitCostStatistics(records);
 
-        Map<String, Integer> planCounts = new LinkedHashMap<>();
+        String longestSubscriptionInfo = GymQueries.topLongestSubscriptions(records, 1).stream()
+                .findFirst()
+                .map(sub -> String.format(Locale.ROOT, "%s (%s, %d міс.)",
+                        sub.getClient(), sub.getPlan(), sub.getMonths()))
+                .orElse("немає");
 
-        for (GymSubscription sub : records) {
-            totalVisits += sub.getVisits();
-            totalRevenue += sub.getPrice();
-            // Поліморфний виклик без перевірки конкретного класу підтипу
-            sumEffectiveCost += sub.effectiveVisitCost();
+        var popularPlanEntry = GymQueries.countByPlan(records).entrySet().stream()
+                .max(Map.Entry.comparingByValue());
 
-            if (sub.getMonths() > maxMonths) {
-                maxMonths = sub.getMonths();
-                longestSubscriptionInfo = String.format(Locale.ROOT, "%s (%s, %d міс.)",
-                        sub.getClient(), sub.getPlan(), sub.getMonths());
-            }
-
-            planCounts.put(sub.getPlan(), planCounts.getOrDefault(sub.getPlan(), 0) + 1);
-        }
-
-        double averageVisits = (double) totalVisits / records.size();
-        double averageEffectiveCost = sumEffectiveCost / records.size();
-
-        String mostPopularPlan = "";
-        int maxPlanCount = -1;
-        for (Map.Entry<String, Integer> entry : planCounts.entrySet()) {
-            if (entry.getValue() > maxPlanCount) {
-                maxPlanCount = entry.getValue();
-                mostPopularPlan = entry.getKey();
-            }
-        }
+        String mostPopularPlan = popularPlanEntry.map(Map.Entry::getKey).orElse("немає");
+        int maxPlanCount = popularPlanEntry.map(entry -> Math.toIntExact(entry.getValue())).orElse(0);
 
         return new GymSummary(
                 records.size(),
-                averageVisits,
-                totalRevenue,
+                visitsStats.getAverage(),
+                revenueStats.getSum(),
                 longestSubscriptionInfo,
                 mostPopularPlan,
                 maxPlanCount,
-                averageEffectiveCost
+                effectiveCostStats.getAverage()
         );
     }
 
     /**
-     * Формує текстовий звіт (зберігає 4 основні показники попередньої роботи та додає поліморфний показник).
+     * Формує текстовий звіт (повністю зберігає формат попередніх робіт).
      */
     public static String formatReport(GymSummary summary) {
         StringBuilder sb = new StringBuilder();
