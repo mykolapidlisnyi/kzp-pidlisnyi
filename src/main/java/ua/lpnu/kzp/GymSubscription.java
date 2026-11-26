@@ -4,10 +4,10 @@ import java.util.Locale;
 import java.util.Objects;
 
 /**
- * Описує незмінний запис про абонемент клієнта у тренажерному залі (Варіант 20).
- * Усі інваріанти перевіряються під час створення об'єкта.
+ * Спільний абстрактний базовий тип для всіх абонементів у тренажерному залі (Варіант 20).
+ * Інкапсулює спільні поля, валідацію інваріантів та поліморфний контракт розрахунку вартості.
  */
-public final class GymSubscription {
+public abstract class GymSubscription {
 
     private final String client;
     private final String plan;
@@ -16,46 +16,59 @@ public final class GymSubscription {
     private final double price;
 
     /**
-     * Створює коректний об'єкт абонемента після перевірки всіх полів.
-     *
-     * @param client ім'я та прізвище клієнта (непорожній рядок)
-     * @param plan   назва тарифного плану (непорожній рядок)
-     * @param months тривалість абонемента в місяцях (має бути > 0)
-     * @param visits кількість відвідувань (має бути >= 0)
-     * @param price  вартість абонемента у грн (скінченне число > 0.0)
-     * @throws IllegalArgumentException якщо хоча б одне поле порушує правила валідації
+     * Створює абонемент після перевірки всіх спільних інваріантів.
+     * Валідація виконується до делегування у приватний конструктор, щоб запобігти CT_CONSTRUCTOR_THROW.
      */
-    public GymSubscription(String client, String plan, int months, int visits, double price) {
-        if (client == null || client.isBlank()) {
-            throw new IllegalArgumentException("Ім'я клієнта не може бути порожнім");
-        }
-        if (plan == null || plan.isBlank()) {
-            throw new IllegalArgumentException("Назва абонемента не може бути порожньою");
-        }
-        if (months <= 0) {
-            throw new IllegalArgumentException("Тривалість місяців повинна бути більше 0 (отримано " + months + ")");
-        }
-        if (visits < 0) {
-            throw new IllegalArgumentException("Кількість відвідувань не може бути від'ємною (отримано " + visits + ")");
-        }
-        if (!Double.isFinite(price) || price <= 0.0) {
-            throw new IllegalArgumentException("Ціна повинна бути скінченним числом > 0.0 (отримано " + price + ")");
-        }
+    protected GymSubscription(String client, String plan, int months, int visits, double price) {
+        this(
+                validateText(client, "Ім'я клієнта не може бути порожнім"),
+                validateText(plan, "Назва абонемента не може бути порожньою"),
+                validatePositive(months, "Тривалість місяців повинна бути більше 0"),
+                validateNonNegative(visits, "Кількість відвідувань не може бути від'ємною"),
+                validatePrice(price),
+                true
+        );
+    }
 
-        this.client = client.trim();
-        this.plan = plan.trim();
+    private GymSubscription(String client, String plan, int months, int visits, double price, boolean validated) {
+        this.client = client;
+        this.plan = plan;
         this.months = months;
         this.visits = visits;
         this.price = price;
     }
 
+    private static String validateText(String value, String message) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(message);
+        }
+        return value.trim();
+    }
+
+    private static int validatePositive(int value, String message) {
+        if (value <= 0) {
+            throw new IllegalArgumentException(message + " (отримано " + value + ")");
+        }
+        return value;
+    }
+
+    private static int validateNonNegative(int value, String message) {
+        if (value < 0) {
+            throw new IllegalArgumentException(message + " (отримано " + value + ")");
+        }
+        return value;
+    }
+
+    private static double validatePrice(double price) {
+        if (!Double.isFinite(price) || price <= 0.0) {
+            throw new IllegalArgumentException("Ціна повинна бути скінченним числом > 0.0 (отримано " + price + ")");
+        }
+        return price;
+    }
+
     /**
-     * Статичний фабричний метод для розбору рядка CSV формату:
+     * Статичний фабричний метод для створення конкретного підтипу абонемента з рядка CSV:
      * {@code client;plan;months;visits;price}
-     *
-     * @param line рядок із вхідного CSV-файлу
-     * @return валідований екземпляр {@link GymSubscription}
-     * @throws IllegalArgumentException якщо рядок пошкоджений або має невірний формат полів
      */
     public static GymSubscription fromCsv(String line) {
         if (line == null || line.isBlank()) {
@@ -95,39 +108,55 @@ public final class GymSubscription {
             throw new IllegalArgumentException("Помилка розбору ціни '" + priceStr + "'", e);
         }
 
-        return new GymSubscription(client, plan, months, visits, price);
+        PlanCategory category = PlanCategory.fromPlanName(plan);
+        return switch (category) {
+            case PREMIUM -> new PremiumSubscription(client, plan, months, visits, price, months * 2);
+            case STANDARD -> new StandardSubscription(client, plan, months, visits, price);
+        };
     }
 
-    public String getClient() {
+    /**
+     * Повертає категорію абонемента (поліморфний контракт).
+     */
+    public abstract PlanCategory getCategory();
+
+    /**
+     * Поліморфний метод обчислення ефективної вартості одного відвідування у грн.
+     * Кожен підтип реалізує власну формулу врахування бонусних занять.
+     */
+    public abstract double effectiveVisitCost();
+
+    public final String getClient() {
         return client;
     }
 
-    public String getPlan() {
+    public final String getPlan() {
         return plan;
     }
 
-    public int getMonths() {
+    public final int getMonths() {
         return months;
     }
 
-    public int getVisits() {
+    public final int getVisits() {
         return visits;
     }
 
-    public double getPrice() {
+    public final double getPrice() {
         return price;
     }
 
     @Override
     public String toString() {
-        return String.format(Locale.ROOT, "%s (%s, %d міс., %d відв., %.2f грн)",
-                client, plan, months, visits, price);
+        return String.format(Locale.ROOT, "%s [%s] (%s, %d міс., %d відв., %.2f грн)",
+                client, getCategory().getDisplayName(), plan, months, visits, price);
     }
 
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (!(o instanceof GymSubscription that)) return false;
+        if (o == null || getClass() != o.getClass()) return false;
+        GymSubscription that = (GymSubscription) o;
         return months == that.months
                 && visits == that.visits
                 && Double.compare(price, that.price) == 0
@@ -137,6 +166,6 @@ public final class GymSubscription {
 
     @Override
     public int hashCode() {
-        return Objects.hash(client, plan, months, visits, price);
+        return Objects.hash(getClass(), client, plan, months, visits, price);
     }
 }

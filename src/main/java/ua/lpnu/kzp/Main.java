@@ -1,7 +1,10 @@
 package ua.lpnu.kzp;
 
 import java.io.BufferedReader;
+import java.io.FileDescriptor;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -12,25 +15,22 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Головний клас застосунку для лабораторної роботи № 2 (Варіант 20 — Тренажерний зал).
- * Використовує інкапсульований клас {@link GymSubscription} та запис {@link GymSummary}.
+ * Головний клас застосунку для лабораторної роботи № 3 (Варіант 20 — Тренажерний зал).
+ * Працює з поліморфною ієрархією {@link GymSubscription} ({@link StandardSubscription}, {@link PremiumSubscription}).
  *
  * @author Підлісний Микола Олександрович
- * @version 2.0.0
+ * @version 3.0.0
  */
 public class Main {
-    
-    public static final String VERSION = "2.0.0";
+
+    public static final String VERSION = "3.0.0";
     public static final String STUDENT_NAME = "Підлісний Микола Олександрович";
     public static final int VARIANT = 20;
 
     public static void main(String[] args) {
-        
-        System.setOut(new java.io.PrintStream(
-                new java.io.FileOutputStream(java.io.FileDescriptor.out), true, StandardCharsets.UTF_8));
-        System.setErr(new java.io.PrintStream(
-                new java.io.FileOutputStream(java.io.FileDescriptor.err), true, StandardCharsets.UTF_8));
-        
+        System.setOut(new PrintStream(new FileOutputStream(FileDescriptor.out), true, StandardCharsets.UTF_8));
+        System.setErr(new PrintStream(new FileOutputStream(FileDescriptor.err), true, StandardCharsets.UTF_8));
+
         String inputPath = "data/input.csv";
         String outputPath = null;
 
@@ -104,9 +104,6 @@ public class Main {
         }
     }
 
-    /**
-     * Зчитує рядки з CSV-файлу та перетворює їх на об'єкти {@link GymSubscription} через фабрику.
-     */
     private static List<GymSubscription> readSubscriptions(Path input) {
         List<GymSubscription> records = new ArrayList<>();
         int lineNumber = 0;
@@ -133,15 +130,16 @@ public class Main {
     }
 
     /**
-     * Обчислює 4 підсумкові показники для списку коректних абонементів.
+     * Обчислює підсумкові показники через поліморфну колекцію базового типу {@link GymSubscription}.
      */
     public static GymSummary calculateSummary(List<GymSubscription> records) {
         if (records == null || records.isEmpty()) {
-            return new GymSummary(0, 0.0, 0.0, "немає", "немає", 0);
+            return new GymSummary(0, 0.0, 0.0, "немає", "немає", 0, 0.0);
         }
 
         int totalVisits = 0;
         double totalRevenue = 0.0;
+        double sumEffectiveCost = 0.0;
         int maxMonths = -1;
         String longestSubscriptionInfo = "";
 
@@ -150,6 +148,8 @@ public class Main {
         for (GymSubscription sub : records) {
             totalVisits += sub.getVisits();
             totalRevenue += sub.getPrice();
+            // Поліморфний виклик без перевірки конкретного класу підтипу
+            sumEffectiveCost += sub.effectiveVisitCost();
 
             if (sub.getMonths() > maxMonths) {
                 maxMonths = sub.getMonths();
@@ -161,6 +161,7 @@ public class Main {
         }
 
         double averageVisits = (double) totalVisits / records.size();
+        double averageEffectiveCost = sumEffectiveCost / records.size();
 
         String mostPopularPlan = "";
         int maxPlanCount = -1;
@@ -177,12 +178,13 @@ public class Main {
                 totalRevenue,
                 longestSubscriptionInfo,
                 mostPopularPlan,
-                maxPlanCount
+                maxPlanCount,
+                averageEffectiveCost
         );
     }
 
     /**
-     * Формує текстовий звіт на основі об'єкта {@link GymSummary} (зберігає формат ЛР № 1).
+     * Формує текстовий звіт (зберігає 4 основні показники попередньої роботи та додає поліморфний показник).
      */
     public static String formatReport(GymSummary summary) {
         StringBuilder sb = new StringBuilder();
@@ -200,6 +202,8 @@ public class Main {
         sb.append(String.format(Locale.ROOT, "3. Найдовший абонемент: %s%n", summary.longestSubscription()));
         sb.append(String.format(Locale.ROOT, "4. Найпопулярніший абонемент: %s (куплено: %d)%n",
                 summary.mostPopularPlan(), summary.mostPopularPlanCount()));
+        sb.append(String.format(Locale.ROOT, "5. Середня ефективна вартість заняття: %.2f грн%n",
+                summary.averageEffectiveVisitCost()));
         sb.append("---------------------------------------\n");
 
         return sb.toString();
