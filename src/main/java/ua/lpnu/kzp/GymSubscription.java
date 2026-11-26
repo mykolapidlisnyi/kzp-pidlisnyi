@@ -9,10 +9,15 @@ import java.util.Objects;
  */
 public abstract class GymSubscription {
 
+    @CsvColumn(header = "client", order = 1)
     private final String client;
+    @CsvColumn(header = "plan", order = 2)
     private final String plan;
+    @CsvColumn(header = "months", order = 3)
     private final int months;
+    @CsvColumn(header = "visits", order = 4)
     private final int visits;
+    @CsvColumn(header = "price", order = 5)
     private final double price;
 
     /**
